@@ -91,6 +91,27 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async getDataByFilter(count: string, tags: string[]) {
+    this.logger.log(`Fetching ${count} random questions with tags: ${tags}`);
+    try {
+      const pipeline = [
+        { $match: { tag: { $in: tags } } },
+        ...(count !== 'All'
+          ? [{ $sample: { size: parseInt(count, 10) } }]
+          : []),
+      ];
+      this.logger.log('Pipeline:', pipeline);
+      const results = await this.getQuizCollection()
+        .aggregate(pipeline)
+        .toArray();
+      this.logger.log(`Fetched ${results.length} random questions`);
+      return results;
+    } catch (error) {
+      this.logger.error('Failed to fetch random questions', error);
+      throw error;
+    }
+  }
+
   async insertData(data: Quiz) {
     try {
       const quizData = { ...data, _id: new ObjectId(data._id) };

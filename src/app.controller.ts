@@ -8,6 +8,7 @@ import {
   HttpException,
   HttpStatus,
   Logger,
+  Query,
 } from '@nestjs/common';
 import { AppService } from './app.service';
 import { Quiz } from './app.interface';
@@ -34,7 +35,7 @@ export class AppController {
     }
   }
 
-  @Get('data')
+  @Get('data/all')
   async getData() {
     try {
       return await this.appService.getData();
@@ -42,6 +43,22 @@ export class AppController {
       this.logger.error('Failed to get data', error);
       throw new HttpException(
         'Failed to get data',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('data/filter')
+  async getDataByFilter(
+    @Query('count') count: string,
+    @Query('tags') tags: string[],
+  ) {
+    try {
+      return await this.appService.getDataByFilter(count, tags);
+    } catch (error) {
+      this.logger.error('Failed to get data by filter', error);
+      throw new HttpException(
+        'Failed to get data by filter',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
