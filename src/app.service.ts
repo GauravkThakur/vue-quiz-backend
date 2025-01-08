@@ -12,6 +12,7 @@ import { Quiz } from './app.interface';
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
   private client: MongoClient;
+  private readonly algorithm = 'aes-256-cbc';
   private readonly key: Uint8Array<ArrayBuffer>;
   private readonly iv: Uint8Array<ArrayBuffer>;
   private readonly uri: string;
@@ -31,18 +32,14 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   }
 
   private encrypt(data: string): string {
-    const algorithm = 'aes-256-cbc';
-    this.logger.log('Key:', this.key, 'IV:', this.iv);
-    const cipher = crypto.createCipheriv(algorithm, this.key, this.iv);
+    const cipher = crypto.createCipheriv(this.algorithm, this.key, this.iv);
     let encrypted = cipher.update(data, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     return encrypted;
   }
 
   private decrypt(data: string): string {
-    const algorithm = 'aes-256-cbc';
-
-    const decipher = crypto.createDecipheriv(algorithm, this.key, this.iv);
+    const decipher = crypto.createDecipheriv(this.algorithm, this.key, this.iv);
     let decrypted = decipher.update(data, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;
@@ -58,7 +55,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   private async connect() {
     try {
-      this.logger.debug('Connecting to MongoDB Atlas', this.uri);
+      this.logger.debug('Connecting to MongoDB Atlas ...');
       if (!this.client) {
         this.client = new MongoClient(this.uri, {
           serverApi: {
@@ -68,7 +65,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           },
         });
         await this.client.connect();
-        this.logger.log('Connected to MongoDB Atlas');
+        this.logger.log('Connection successful !!!');
       }
     } catch (error) {
       this.logger.error('Failed to connect to MongoDB Atlas', error);
