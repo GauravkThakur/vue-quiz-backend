@@ -4,13 +4,16 @@ import {
   OnModuleDestroy,
   Logger,
 } from '@nestjs/common';
-import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
-import { Quiz } from './app.interface';
 import { ConfigService } from '@nestjs/config';
+import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
+import * as crypto from 'crypto';
+import { Quiz } from './app.interface';
 
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
   private client: MongoClient;
+  private readonly key: Uint8Array<ArrayBuffer>;
+  private readonly iv: Uint8Array<ArrayBuffer>;
   private readonly uri: string;
   private readonly logger = new Logger(AppService.name);
 
@@ -18,7 +21,31 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     const mongoUser = this.configService.get<string>('MONGO_USER');
     const mongoPassword = this.configService.get<string>('MONGO_PASSWORD');
     const mongoCluster = this.configService.get<string>('MONGO_CLUSTER');
+    const key = this.configService.get<string>('ENCRYPTION_KEY');
+    const iv = this.configService.get<string>('ENCRYPTION_IV');
+    const keyMatch = key.match(/.{1,2}/g) || [];
+    const ivMatch = iv.match(/.{1,2}/g) || [];
+    this.key = new Uint8Array(keyMatch.map((byte) => parseInt(byte, 16)));
+    this.iv = new Uint8Array(ivMatch.map((byte) => parseInt(byte, 16)));
     this.uri = `mongodb+srv://${mongoUser}:${mongoPassword}@${mongoCluster.toLowerCase()}.p8uu3.mongodb.net/?retryWrites=true&w=majority&appName=${mongoCluster}`;
+  }
+
+  private encrypt(data: string): string {
+    const algorithm = 'aes-256-cbc';
+    this.logger.log('Key:', this.key, 'IV:', this.iv);
+    const cipher = crypto.createCipheriv(algorithm, this.key, this.iv);
+    let encrypted = cipher.update(data, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return encrypted;
+  }
+
+  private decrypt(data: string): string {
+    const algorithm = 'aes-256-cbc';
+
+    const decipher = crypto.createDecipheriv(algorithm, this.key, this.iv);
+    let decrypted = decipher.update(data, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
   }
 
   async onModuleInit() {
@@ -31,7 +58,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   private async connect() {
     try {
-      this.logger.log('Connecting to MongoDB Atlas', this.uri);
+      this.logger.debug('Connecting to MongoDB Atlas', this.uri);
       if (!this.client) {
         this.client = new MongoClient(this.uri, {
           serverApi: {
@@ -104,8 +131,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       const results = await this.getQuizCollection()
         .aggregate(pipeline)
         .toArray();
-      this.logger.log(`Fetched ${results.length} random questions`);
-      return results;
+      const encryptedResults = results.map((item) => {
+        item.correctAnswer = this.encrypt(item.correctAnswer);
+        return item;
+      });
+      this.logger.log(`Encrypted ${encryptedResults.length} random questions`);
+      return encryptedResults;
     } catch (error) {
       this.logger.error('Failed to fetch random questions', error);
       throw error;
